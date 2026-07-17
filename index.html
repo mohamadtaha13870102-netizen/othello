@@ -103,7 +103,6 @@ body {
   margin: auto;
 }
 
-/* باکس پروفایل با تکنیک Absolute برای وسط‌چین دقیق */
 .profile-section {
   position: relative;
   display: flex;
@@ -414,29 +413,51 @@ body {
 .toast.show { transform: translateX(-50%) translateY(0); }
 .toast i { color: var(--gold-bright); }
 
-/* ============ MOBILE LAYOUT (Restored & Fixed) ============ */
+/* ============ MOBILE LAYOUT (Fixed Native Scroll) ============ */
 @media (max-width: 900px) {
-  #game-screen { padding: 50px 10px 10px 10px; }
-  .game-wrapper { gap: 12px; height: auto; min-height: 100%; overflow-y: auto; }
-  .game-layout { display: flex; flex-direction: column; gap: 12px; width: 100%; }
-  .panel { width: 100%; max-width: 450px; margin: 0 auto; padding: 12px; }
-  .player-card { padding: 8px; gap: 10px; margin-bottom: 6px; }
-  .player-disc { width: 32px; height: 32px; }
-  .player-info { text-align: right; }
-  .player-name { font-size: 14px; }
-  .player-status { font-size: 10px; }
-  .player-score { font-size: 20px; min-width: 28px; }
-  .action-buttons { margin-top: 8px; gap: 6px; }
-  .btn { padding: 8px 10px; font-size: 12px; }
-  .board-frame { padding: 10px; }
-  .board { width: min(380px, 80vw); }
-  .status-bar { width: min(380px, 80vw); font-size: 12px; min-height: 32px; padding: 6px 12px; }
-  .game-header { width: 100%; max-width: 450px; margin: 0 auto; }
-  .game-title { font-size: 18px; }
-  .back-btn { width: 32px; height: 32px; font-size: 12px; }
-  .diff-badge { font-size: 9px; padding: 4px 8px; }
-  .history-list { max-height: 160px; }
-  .history-item { font-size: 11px; padding: 4px 6px; }
+  #game-screen {
+    display: block;
+    padding: 60px 10px 20px 10px;
+    height: auto;
+    min-height: 100%;
+    overflow-y: auto;
+  }
+  .game-wrapper {
+    display: block;
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+    height: auto;
+  }
+  .game-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: 100%;
+  }
+  .panel {
+    width: 100%;
+    padding: 12px;
+  }
+  .history-list {
+    max-height: 200px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .board-container {
+    width: 100%;
+  }
+  .board {
+    width: min(380px, 85vw);
+  }
+  .status-bar {
+    width: min(380px, 85vw);
+  }
+  .game-header {
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto 15px auto;
+  }
   .menu-container { max-width: 90%; }
   .mode-cards { grid-template-columns: 1fr; }
   .difficulty-cards { grid-template-columns: repeat(2, 1fr); }
@@ -609,7 +630,7 @@ body {
 
 <script>
 // ============================================================
-// AUDIO MANAGER (Robust Mobile Unlock Technique)
+// AUDIO MANAGER (Robust Mobile BGM Fix)
 // ============================================================
 class AudioManager {
   constructor() {
@@ -632,10 +653,16 @@ class AudioManager {
     }
   }
 
-  unlock() {
+  // Must be async to ensure context is fully running before scheduling BGM
+  async unlock() {
     this.init();
-    if (this.ctx && !this.unlocked) {
-      // Play a silent sound to unlock the audio channel on iOS/Android
+    if (!this.ctx) return false;
+    
+    if (this.ctx.state === 'suspended') {
+      await this.ctx.resume();
+    }
+    
+    if (!this.unlocked) {
       const buffer = this.ctx.createBuffer(1, 1, 22050);
       const source = this.ctx.createBufferSource();
       source.buffer = buffer;
@@ -643,9 +670,8 @@ class AudioManager {
       source.start(0);
       this.unlocked = true;
     }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
+    
+    return this.ctx.state === 'running';
   }
 
   playClick() {
@@ -722,6 +748,7 @@ class AudioManager {
 
   startBGM() {
     if (!this.ctx || this.bgmTimer || this.muted) return;
+    if (this.ctx.state !== 'running') return; // Prevent starting if context isn't ready
     
     this.bgmGain = this.ctx.createGain();
     this.bgmGain.gain.setValueAtTime(0, this.ctx.currentTime);
@@ -790,13 +817,15 @@ class AudioManager {
 
 const audioManager = new AudioManager();
 
-// Use pointerdown for the most reliable mobile unlock, fallback to touchstart/click
-function handleAudioUnlock(e) {
-  audioManager.unlock();
-  if (!audioManager.muted && !audioManager.bgmTimer) {
+// Async handler to ensure AudioContext is 'running' before BGM starts
+async function handleAudioUnlock(e) {
+  const isRunning = await audioManager.unlock();
+  if (isRunning && !audioManager.muted && !audioManager.bgmTimer) {
     audioManager.startBGM();
   }
 }
+
+// Attach to all standard interaction events for mobile compatibility
 document.addEventListener('pointerdown', handleAudioUnlock);
 document.addEventListener('touchstart', handleAudioUnlock);
 document.addEventListener('click', handleAudioUnlock);
@@ -1027,9 +1056,9 @@ usernameInput.addEventListener('input', (e) => {
 });
 
 if (audioManager.muted) soundBtn.innerHTML = '<i class="fas fa-volume-mute"></i>';
-soundBtn.addEventListener('click', (e) => {
+soundBtn.addEventListener('click', async (e) => {
   e.stopPropagation();
-  audioManager.unlock();
+  await audioManager.unlock();
   audioManager.playClick();
   const muted = audioManager.toggleMute();
   soundBtn.innerHTML = `<i class="fas fa-volume-${muted ? 'mute' : 'up'}"></i>`;
