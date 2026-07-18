@@ -595,39 +595,28 @@ body {
 
 <script>
 // ============================================================
-// AUDIO MANAGER (Maximized Volume with Compressor/Limiter)
+// AUDIO MANAGER (Balanced 1.8x Gain & BGM Lock)
 // ============================================================
 class AudioManager {
   constructor() {
     this.ctx = null;
     this.masterGain = null;
-    this.compressor = null;
     this.bgmGain = null;
     this.bgmSource = null;
     this.ambientBuffer = null;
     this.muted = localStorage.getItem('othello_muted') === 'true';
     this.unlocked = false;
+    this.isStartingBGM = false; // Prevents double playing
   }
 
   init() {
     if (!this.ctx) {
       try {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        // Master Gain set to 3.5 for maximum amplification
+        // Balanced gain for both Android and Desktop
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = this.muted ? 0 : 3.5; 
-        
-        // Compressor acts as a Limiter to prevent distortion at max volume
-        this.compressor = this.ctx.createDynamicsCompressor();
-        this.compressor.threshold.value = -1;
-        this.compressor.knee.value = 0;
-        this.compressor.ratio.value = 20;
-        this.compressor.attack.value = 0.003;
-        this.compressor.release.value = 0.25;
-        
-        this.masterGain.connect(this.compressor);
-        this.compressor.connect(this.ctx.destination);
+        this.masterGain.gain.value = this.muted ? 0 : 1.8; 
+        this.masterGain.connect(this.ctx.destination);
       } catch(e) { console.error("Audio not supported"); }
     }
   }
@@ -697,7 +686,7 @@ class AudioManager {
     const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
     osc.connect(gain); gain.connect(this.masterGain);
     osc.type = 'sine'; osc.frequency.value = 300;
-    gain.gain.setValueAtTime(0.25, this.ctx.currentTime); // Increased volume
+    gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
     osc.start(); osc.stop(this.ctx.currentTime + 0.05);
   }
@@ -709,7 +698,7 @@ class AudioManager {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(500, this.ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.15);
-    gain.gain.setValueAtTime(0.6, this.ctx.currentTime); // Increased volume
+    gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
     osc.start(); osc.stop(this.ctx.currentTime + 0.2);
   }
@@ -722,7 +711,7 @@ class AudioManager {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(180, this.ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(280, this.ctx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.4, this.ctx.currentTime); // Increased volume
+    gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
     osc.start(); osc.stop(this.ctx.currentTime + 0.15);
   }
@@ -735,7 +724,7 @@ class AudioManager {
         const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
         osc.connect(gain); gain.connect(this.masterGain);
         osc.type = 'sine'; osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.8, this.ctx.currentTime); // Increased volume
+        gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.6);
         osc.start(); osc.stop(this.ctx.currentTime + 0.6);
       }, i * 150);
@@ -748,24 +737,33 @@ class AudioManager {
   }
 
   async startBGM() {
-    if (!this.ctx || this.bgmSource || this.muted) return;
+    if (!this.ctx || this.bgmSource || this.muted || this.isStartingBGM) return;
     if (this.ctx.state !== 'running') return;
-    if (!this.ambientBuffer) await this.generateAmbientBuffer();
+    
+    this.isStartingBGM = true; // Lock
+    
+    if (!this.ambientBuffer) {
+      await this.generateAmbientBuffer();
+    }
+    
     this.bgmGain = this.ctx.createGain();
     this.bgmGain.gain.setValueAtTime(0, this.ctx.currentTime);
-    this.bgmGain.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 2); // Louder BGM
+    this.bgmGain.gain.linearRampToValueAtTime(0.15, this.ctx.currentTime + 2);
     this.bgmGain.connect(this.masterGain);
+    
     this.bgmSource = this.ctx.createBufferSource();
     this.bgmSource.buffer = this.ambientBuffer;
     this.bgmSource.loop = true;
     this.bgmSource.connect(this.bgmGain);
     this.bgmSource.start(0);
+    
+    this.isStartingBGM = false; // Unlock
   }
 
   toggleMute() {
     this.muted = !this.muted;
     localStorage.setItem('othello_muted', this.muted);
-    if (this.masterGain) this.masterGain.gain.setValueAtTime(this.muted ? 0 : 3.5, this.ctx.currentTime);
+    if (this.masterGain) this.masterGain.gain.setValueAtTime(this.muted ? 0 : 1.8, this.ctx.currentTime);
     if (this.muted) this.stopBGM(); else this.startBGM();
     return this.muted;
   }
@@ -1452,7 +1450,6 @@ async function makeMove(row, col, sendToOpponent = false) {
     } else {
       moveLog.push({ player: currentPlayer, row: -1, col: -1, flips: 0, pass: true });
       showToast(`${currentPlayer === BLACK ? 'سیاه' : 'سفید'} حرکتی ندارد — نوبت رد شد`, 'fa-forward');
-      // Turn passing is handled deterministically locally for both clients. No need to send 'pass' message over network.
       currentPlayer = opponent(currentPlayer); updateValidMoves();
     }
   }
