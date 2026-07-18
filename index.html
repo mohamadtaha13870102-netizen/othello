@@ -748,7 +748,7 @@ class AudioManager {
     
     this.bgmGain = this.ctx.createGain();
     this.bgmGain.gain.setValueAtTime(0, this.ctx.currentTime);
-    this.bgmGain.gain.linearRampToValueAtTime(0.13, this.ctx.currentTime + 2);
+    this.bgmGain.gain.linearRampToValueAtTime(0.15, this.ctx.currentTime + 2);
     this.bgmGain.connect(this.masterGain);
     
     this.bgmSource = this.ctx.createBufferSource();
