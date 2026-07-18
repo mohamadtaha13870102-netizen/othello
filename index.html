@@ -776,7 +776,7 @@ class AudioManager {
   toggleMute() {
     this.muted = !this.muted;
     localStorage.setItem('othello_muted', this.muted);
-    if (this.masterGain) this.masterGain.gain.setValueAtTime(this.muted ? 0 : 2.0, this.ctx.currentTime);
+    if (this.masterGain) this.masterGain.gain.setValueAtTime(this.muted ? 0 : 4.0, this.ctx.currentTime);
     if (this.muted) this.stopBGM(); else this.startBGM();
     return this.muted;
   }
