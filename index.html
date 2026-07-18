@@ -450,7 +450,7 @@ body {
     
     <h1 class="menu-title">OTHELLO</h1>
     <p class="menu-subtitle">بازی استراتژیک باستانی</p>
-    <p class="menu-tagline">یک دقیقه برای یادگیری، یک عمر برای تسلط</p>
+    <p class="menu-tagline">«یک دقیقه برای یادگیری، یک عمر برای تسلط»</p>
     
     <div class="profile-section">
       <div class="profile-avatar"><i class="fas fa-user-astronaut"></i></div>
@@ -595,12 +595,13 @@ body {
 
 <script>
 // ============================================================
-// AUDIO MANAGER (Robust Buffer Loop for Mobile Compatibility)
+// AUDIO MANAGER (Maximized Volume with Compressor/Limiter)
 // ============================================================
 class AudioManager {
   constructor() {
     this.ctx = null;
     this.masterGain = null;
+    this.compressor = null;
     this.bgmGain = null;
     this.bgmSource = null;
     this.ambientBuffer = null;
@@ -612,9 +613,21 @@ class AudioManager {
     if (!this.ctx) {
       try {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Master Gain set to 3.5 for maximum amplification
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = this.muted ? 0 : 1;
-        this.masterGain.connect(this.ctx.destination);
+        this.masterGain.gain.value = this.muted ? 0 : 3.5; 
+        
+        // Compressor acts as a Limiter to prevent distortion at max volume
+        this.compressor = this.ctx.createDynamicsCompressor();
+        this.compressor.threshold.value = -1;
+        this.compressor.knee.value = 0;
+        this.compressor.ratio.value = 20;
+        this.compressor.attack.value = 0.003;
+        this.compressor.release.value = 0.25;
+        
+        this.masterGain.connect(this.compressor);
+        this.compressor.connect(this.ctx.destination);
       } catch(e) { console.error("Audio not supported"); }
     }
   }
@@ -684,7 +697,7 @@ class AudioManager {
     const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
     osc.connect(gain); gain.connect(this.masterGain);
     osc.type = 'sine'; osc.frequency.value = 300;
-    gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
+    gain.gain.setValueAtTime(0.25, this.ctx.currentTime); // Increased volume
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
     osc.start(); osc.stop(this.ctx.currentTime + 0.05);
   }
@@ -696,7 +709,7 @@ class AudioManager {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(500, this.ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.15);
-    gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+    gain.gain.setValueAtTime(0.6, this.ctx.currentTime); // Increased volume
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
     osc.start(); osc.stop(this.ctx.currentTime + 0.2);
   }
@@ -709,7 +722,7 @@ class AudioManager {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(180, this.ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(280, this.ctx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.06, this.ctx.currentTime);
+    gain.gain.setValueAtTime(0.4, this.ctx.currentTime); // Increased volume
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
     osc.start(); osc.stop(this.ctx.currentTime + 0.15);
   }
@@ -722,7 +735,7 @@ class AudioManager {
         const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
         osc.connect(gain); gain.connect(this.masterGain);
         osc.type = 'sine'; osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.setValueAtTime(0.8, this.ctx.currentTime); // Increased volume
         gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.6);
         osc.start(); osc.stop(this.ctx.currentTime + 0.6);
       }, i * 150);
@@ -740,7 +753,7 @@ class AudioManager {
     if (!this.ambientBuffer) await this.generateAmbientBuffer();
     this.bgmGain = this.ctx.createGain();
     this.bgmGain.gain.setValueAtTime(0, this.ctx.currentTime);
-    this.bgmGain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 2);
+    this.bgmGain.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 2); // Louder BGM
     this.bgmGain.connect(this.masterGain);
     this.bgmSource = this.ctx.createBufferSource();
     this.bgmSource.buffer = this.ambientBuffer;
@@ -752,7 +765,7 @@ class AudioManager {
   toggleMute() {
     this.muted = !this.muted;
     localStorage.setItem('othello_muted', this.muted);
-    if (this.masterGain) this.masterGain.gain.setValueAtTime(this.muted ? 0 : 1, this.ctx.currentTime);
+    if (this.masterGain) this.masterGain.gain.setValueAtTime(this.muted ? 0 : 3.5, this.ctx.currentTime);
     if (this.muted) this.stopBGM(); else this.startBGM();
     return this.muted;
   }
@@ -1226,7 +1239,7 @@ function disconnectMQTT() {
   if (mqttClient) {
     try {
       if (gameRoomId && mqttClient.connected) {
-        mqttClient.publish(`othello/game/${gameRoomId}`, JSON.stringify({ type: 'resign', from: myId }));
+        mqttClient.publish(`othello/game/${gameRoomId}`, JSON.stringify({ type: 'resign', from: myId }), { qos: 1 });
       }
       mqttClient.end(true);
     } catch(e) {}
@@ -1257,8 +1270,7 @@ function startOnlineMatchmaking() {
   mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', { clientId: myId, clean: true, connectTimeout: 5000 });
   mqttClient.on('connect', () => {
     if (!isSearching) { if (mqttClient) mqttClient.end(true); mqttClient = null; return; }
-    mqttClient.subscribe('othello/lobby');
-    // Heartbeat to continuously broadcast presence
+    mqttClient.subscribe('othello/lobby', { qos: 1 });
     publishSearch();
     searchHeartbeat = setInterval(publishSearch, 1500);
   });
@@ -1280,7 +1292,7 @@ function startOnlineMatchmaking() {
 
 function publishSearch() {
   if (mqttClient && mqttClient.connected) {
-    mqttClient.publish('othello/lobby', JSON.stringify({ type: 'searching', id: myId, name: myUsername }));
+    mqttClient.publish('othello/lobby', JSON.stringify({ type: 'searching', id: myId, name: myUsername }), { qos: 1 });
   }
 }
 
@@ -1289,7 +1301,7 @@ document.getElementById('cancel-search').addEventListener('click', () => {
   if (searchHeartbeat) clearInterval(searchHeartbeat);
   if (mqttClient) {
     try {
-      if (mqttClient.connected) mqttClient.publish('othello/lobby', JSON.stringify({ type: 'cancel', id: myId }));
+      if (mqttClient.connected) mqttClient.publish('othello/lobby', JSON.stringify({ type: 'cancel', id: myId }), { qos: 1 });
       mqttClient.end(true);
     } catch(e) {}
     mqttClient = null;
@@ -1308,7 +1320,7 @@ function handleLobbyMessage(data) {
       mqttClient.publish('othello/lobby', JSON.stringify({
         type: 'match', from: myId, to: data.id, room: gameRoomId,
         blackPlayer: iAmBlack ? myId : data.id, whitePlayer: iAmBlack ? data.id : myId, name: myUsername
-      }));
+      }), { qos: 1 });
       enterOnlineGame();
     }
   } else if (data.type === 'match' && data.to === myId) {
@@ -1323,7 +1335,7 @@ function enterOnlineGame() {
   isSearching = false;
   if (searchHeartbeat) clearInterval(searchHeartbeat);
   mqttClient.unsubscribe('othello/lobby');
-  mqttClient.subscribe(`othello/game/${gameRoomId}`);
+  mqttClient.subscribe(`othello/game/${gameRoomId}`, { qos: 1 });
   diffBadgeEl.innerHTML = `<span class="live-indicator"></span> آنلاین`;
   nameBlackEl.textContent = myColorInOnline === BLACK ? myUsername : opponentName;
   nameWhiteEl.textContent = myColorInOnline === WHITE ? myUsername : opponentName;
@@ -1341,7 +1353,6 @@ function initGame() {
   isAnimating = false; aiThinking = false; lastMove = null;
   buildBoard(); updateValidMoves(); render(); updateHistoryDisplay();
   
-  // Control UI buttons based on mode
   if (gameMode === 'online') {
     btnMenu.style.display = 'none';
     btnResign.style.display = 'flex';
@@ -1418,22 +1429,30 @@ async function makeMove(row, col, sendToOpponent = false) {
   for (let i = 0; i < move.flips.length; i++) {
     const [r, c] = move.flips[i];
     setTimeout(() => {
-      const fromRot = player === BLACK ? 180 : 0, toRot = player === BLACK ? 0 : 180;
+      // Fix Animation: Smooth forward rotation from 180 to 360 instead of 0
+      const fromRot = player === BLACK ? 180 : 0;
+      const toRot = player === BLACK ? 360 : 180;
       board[r][c] = player; renderCellWithFlip(r, c, fromRot, toRot); audioManager.playFlip();
       const flipCell = boardEl.children[r * 8 + c], flipRect = flipCell.getBoundingClientRect();
       fxCanvas.sparkle(flipRect.left + flipRect.width / 2, flipRect.top + flipRect.height / 2, '#f0c060', 3);
     }, 100 + i * 80);
   }
   await new Promise(resolve => setTimeout(resolve, move.flips.length * 80 + 450));
-  if (sendToOpponent && gameMode === 'online' && mqttClient) mqttClient.publish(`othello/game/${gameRoomId}`, JSON.stringify({ type: 'move', from: myId, row, col }));
+  
+  if (sendToOpponent && gameMode === 'online' && mqttClient) {
+    mqttClient.publish(`othello/game/${gameRoomId}`, JSON.stringify({ type: 'move', from: myId, row, col }), { qos: 1 });
+  }
+  
   currentPlayer = opponent(currentPlayer); updateValidMoves();
+  
   if (validMoves.length === 0) {
     const otherMoves = getAllValidMoves(currentPlayer === BLACK ? WHITE : BLACK);
-    if (otherMoves.length === 0) { gameOver = true; isAnimating = false; render(); updateHistoryDisplay(); setTimeout(() => showGameOver(), 500); return true; }
-    else {
+    if (otherMoves.length === 0) { 
+      gameOver = true; isAnimating = false; render(); updateHistoryDisplay(); setTimeout(() => showGameOver(), 500); return true; 
+    } else {
       moveLog.push({ player: currentPlayer, row: -1, col: -1, flips: 0, pass: true });
       showToast(`${currentPlayer === BLACK ? 'سیاه' : 'سفید'} حرکتی ندارد — نوبت رد شد`, 'fa-forward');
-      if (gameMode === 'online' && mqttClient) mqttClient.publish(`othello/game/${gameRoomId}`, JSON.stringify({ type: 'pass', from: myId }));
+      // Turn passing is handled deterministically locally for both clients. No need to send 'pass' message over network.
       currentPlayer = opponent(currentPlayer); updateValidMoves();
     }
   }
@@ -1451,7 +1470,6 @@ async function aiMove() {
   const config = DIFFICULTY_CONFIG[aiDifficulty];
   const aiColor = playerSide === 'black' ? WHITE : BLACK;
   
-  // Flatten board to Int8Array for ultra-fast Web Worker transfer
   const flatBoard = new Int8Array(64);
   for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) flatBoard[r * 8 + c] = board[r][c];
   
@@ -1469,6 +1487,19 @@ async function aiMove() {
   
   aiThinking = false; statusBarEl.classList.remove('thinking');
   if (move) await makeMove(move.row, move.col, false);
+}
+
+async function handleGameMessage(data) {
+  if (data.from !== opponentId) return;
+  if (data.type === 'move') {
+    if (currentPlayer !== myColorInOnline && !isAnimating) {
+      const move = validMoves.find(m => m.row === data.row && m.col === data.col);
+      if (move) await makeMove(data.row, data.col, false);
+    }
+  } else if (data.type === 'resign') {
+    gameOver = true; showToast('حریف تسلیم شد!', 'fa-flag');
+    setTimeout(() => showGameOver(true), 500);
+  }
 }
 
 function render() {
@@ -1588,7 +1619,12 @@ function undoMove() {
   showToast('حرکت برگردانده شد', 'fa-undo');
 }
 
-btnResign.addEventListener('click', () => { if (gameMode === 'online' && mqttClient && gameRoomId) { mqttClient.publish(`othello/game/${gameRoomId}`, JSON.stringify({ type: 'resign', from: myId })); gameOver = true; setTimeout(() => showGameOver(false), 200); } });
+btnResign.addEventListener('click', () => { 
+  if (gameMode === 'online' && mqttClient && gameRoomId) { 
+    mqttClient.publish(`othello/game/${gameRoomId}`, JSON.stringify({ type: 'resign', from: myId }), { qos: 1 }); 
+    gameOver = true; setTimeout(() => showGameOver(false), 200); 
+  } 
+});
 
 let toastTimer = null;
 function showToast(message, icon = 'fa-info-circle') { toastTextEl.textContent = message; toastEl.querySelector('i').className = `fas ${icon}`; toastEl.classList.add('show'); if (toastTimer) clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2500); }
