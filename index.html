@@ -641,7 +641,7 @@ class AudioManager {
     const duration = 12, sampleRate = 44100;
     const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, sampleRate * duration, sampleRate);
     const masterGain = offlineCtx.createGain();
-    masterGain.gain.value = 0.5;
+    masterGain.gain.value = 1;
     masterGain.connect(offlineCtx.destination);
     const filter = offlineCtx.createBiquadFilter();
     filter.type = 'lowpass'; filter.frequency.value = 1100;
