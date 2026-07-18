@@ -450,7 +450,7 @@ body {
     
     <h1 class="menu-title">OTHELLO</h1>
     <p class="menu-subtitle">بازی استراتژیک باستانی</p>
-    <p class="menu-tagline">یک دقیقه برای یادگیری، یک عمر برای تسلط</p>
+    <p class="menu-tagline">«یک دقیقه برای یادگیری، یک عمر برای تسلط»</p>
     
     <div class="profile-section">
       <div class="profile-avatar"><i class="fas fa-user-astronaut"></i></div>
@@ -595,28 +595,41 @@ body {
 
 <script>
 // ============================================================
-// AUDIO MANAGER (Balanced 1.8x Gain & BGM Lock)
+// AUDIO MANAGER (Balanced 2.0x Gain with Compressor/Limiter)
 // ============================================================
 class AudioManager {
   constructor() {
     this.ctx = null;
     this.masterGain = null;
+    this.compressor = null; // Added to prevent clipping/distortion
     this.bgmGain = null;
     this.bgmSource = null;
     this.ambientBuffer = null;
     this.muted = localStorage.getItem('othello_muted') === 'true';
     this.unlocked = false;
-    this.isStartingBGM = false; // Prevents double playing
+    this.isStartingBGM = false; 
   }
 
   init() {
     if (!this.ctx) {
       try {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-        // Balanced gain for both Android and Desktop
+        
+        // 1. Creating Compressor to act as a Limiter (prevents distortion)
+        this.compressor = this.ctx.createDynamicsCompressor();
+        this.compressor.threshold.value = -1.0;
+        this.compressor.knee.value = 0;
+        this.compressor.ratio.value = 20;
+        this.compressor.attack.value = 0.003;
+        this.compressor.release.value = 0.25;
+        
+        // 2. Master Gain set to 2.0 for max safe amplification
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = this.muted ? 0 : 1.8; 
-        this.masterGain.connect(this.ctx.destination);
+        this.masterGain.gain.value = this.muted ? 0 : 2.0; 
+        
+        // 3. Audio Chain: Audio -> MasterGain -> Compressor -> Speakers
+        this.masterGain.connect(this.compressor);
+        this.compressor.connect(this.ctx.destination);
       } catch(e) { console.error("Audio not supported"); }
     }
   }
@@ -641,7 +654,7 @@ class AudioManager {
     const duration = 12, sampleRate = 44100;
     const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, sampleRate * duration, sampleRate);
     const masterGain = offlineCtx.createGain();
-    masterGain.gain.value = 3;
+    masterGain.gain.value = 0.5;
     masterGain.connect(offlineCtx.destination);
     const filter = offlineCtx.createBiquadFilter();
     filter.type = 'lowpass'; filter.frequency.value = 1100;
@@ -748,7 +761,7 @@ class AudioManager {
     
     this.bgmGain = this.ctx.createGain();
     this.bgmGain.gain.setValueAtTime(0, this.ctx.currentTime);
-    this.bgmGain.gain.linearRampToValueAtTime(0.3, this.ctx.currentTime + 2);
+    this.bgmGain.gain.linearRampToValueAtTime(0.15, this.ctx.currentTime + 2);
     this.bgmGain.connect(this.masterGain);
     
     this.bgmSource = this.ctx.createBufferSource();
@@ -763,7 +776,7 @@ class AudioManager {
   toggleMute() {
     this.muted = !this.muted;
     localStorage.setItem('othello_muted', this.muted);
-    if (this.masterGain) this.masterGain.gain.setValueAtTime(this.muted ? 0 : 1.8, this.ctx.currentTime);
+    if (this.masterGain) this.masterGain.gain.setValueAtTime(this.muted ? 0 : 2.0, this.ctx.currentTime);
     if (this.muted) this.stopBGM(); else this.startBGM();
     return this.muted;
   }
